@@ -1,0 +1,56 @@
+name: Build Debug APK
+
+  on:
+    push:
+      branches: [ master ]
+    workflow_dispatch:
+
+  jobs:
+    build:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout omninet
+          uses: actions/checkout@v4
+
+        - name: Setup JDK 17
+          uses: actions/setup-java@v4
+          with:
+            java-version: '17'
+            distribution: 'temurin'
+
+        - name: Setup Android SDK
+          uses: android-actions/setup-android@v3
+
+        - name: Install NDK 25.2 + Build Tools 34
+          run: sdkmanager "ndk;25.2.9519653" "build-tools;34.0.0" "platforms;android-34"
+
+        - name: Upgrade Gradle to 7.6.4 (Java 17 compatible)
+          run: |
+            sed -i 's|distributionUrl=.*|distributionUrl=https\\://services.gradle.org/distributions/gradle-7.6.4-bin.zip|' gradle/wrapper/gradle-wrapper.properties
+
+        - name: Patch build.gradle
+          run: |
+            sed -i "s|compileSdk 34|compileSdk 34\n    buildToolsVersion \"34.0.0\"\n    ndkVersion \"25.2.9519653\"|" app/build.gradle
+
+        - name: Cache Gradle
+          uses: actions/cache@v4
+          with:
+            path: |
+              ~/.gradle/caches
+              ~/.gradle/wrapper
+            key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+            restore-keys: gradle-
+
+        - name: Make gradlew executable
+          run: chmod +x ./gradlew
+
+        - name: Build Debug APK
+          run: ./gradlew assembleDebug --stacktrace
+
+        - name: Upload APK
+          uses: actions/upload-artifact@v4
+          with:
+            name: omninet-debug
+            path: app/build/outputs/apk/debug/*.apk
+            retention-days: 14
+  
